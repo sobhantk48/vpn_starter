@@ -1,20 +1,36 @@
-import 'package:equatable/equatable.dart';
-
-class VpnProfile extends Equatable {
-  final String id;
-  final String name;
-  final String type;
-  final String rawConfig;
-  final bool isDefault;
-
-  const VpnProfile({
+class Profile {
+  const Profile({
     required this.id,
     required this.name,
-    required this.type,
-    required this.rawConfig,
-    this.isDefault = false,
+    required this.coreName,
+    this.isActive = false,
   });
 
-  @override
-  List<Object?> get props => [id, name, type, rawConfig, isDefault];
+  final String id;
+  final String name;
+  final String coreName;
+  final bool isActive;
+
+  factory Profile.defaultProfile() {
+    return const Profile(
+      id: 'default',
+      name: 'Default Profile',
+      coreName: 'sing-box',
+      isActive: true,
+    );
+  }
+
+  Profile copyWith({
+    String? id,
+    String? name,
+    String? coreName,
+    bool? isActive,
+  }) {
+    return Profile(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      coreName: coreName ?? this.coreName,
+      isActive: isActive ?? this.isActive,
+    );
+  }
 }

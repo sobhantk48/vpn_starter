@@ -1,37 +1,32 @@
-import 'package:equatable/equatable.dart';
-
-class CoreInfo extends Equatable {
-  final String name;
-  final String? version;
-  final bool installed;
-  final bool updateAvailable;
-  final bool downloading;
-
+class CoreInfo {
   const CoreInfo({
     required this.name,
-    this.version,
     required this.installed,
-    required this.updateAvailable,
-    required this.downloading,
+    this.version,
   });
 
-  CoreInfo copyWith({
-    String? name,
-    String? version,
-    bool? installed,
-    bool? updateAvailable,
-    bool? downloading,
-  }) {
+  final String name;
+  final bool installed;
+  final String? version;
+
+  factory CoreInfo.fromMap(Map<dynamic, dynamic> map) {
     return CoreInfo(
-      name: name ?? this.name,
-      version: version ?? this.version,
-      installed: installed ?? this.installed,
-      updateAvailable: updateAvailable ?? this.updateAvailable,
-      downloading: downloading ?? this.downloading,
+      name: (map['name'] ?? '').toString(),
+      installed: map['installed'] == true,
+      version: map['version']?.toString(),
     );
   }
 
-  @override
-  List<Object?> get props =>
-      [name, version, installed, updateAvailable, downloading];
+  CoreInfo copyWith({
+    String? name,
+    bool? installed,
+    String? version,
+    bool clearVersion = false,
+  }) {
+    return CoreInfo(
+      name: name ?? this.name,
+      installed: installed ?? this.installed,
+      version: clearVersion ? null : (version ?? this.version),
+    );
+  }
 }

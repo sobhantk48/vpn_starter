@@ -1,25 +1,27 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../services/platform/core_platform_api.dart';
-import '../domain/core_info.dart';
-
-final coreManagerRepositoryProvider = Provider<CoreManagerRepository>((ref) {
-  return CoreManagerRepository(ref.read(corePlatformApiProvider));
-});
+import 'package:vpn_starter/core/platform/core_platform_api.dart';
+import 'package:vpn_starter/features/core_manager/domain/core_info.dart';
 
 class CoreManagerRepository {
-  final CorePlatformApi _platformApi;
+  CoreManagerRepository(this._api);
 
-  CoreManagerRepository(this._platformApi);
+  final CorePlatformApi _api;
 
-  Future<List<CoreInfo>> getInstalledCores() {
-    return _platformApi.getInstalledCores();
+  Future<List<CoreInfo>> getCores() async {
+    final raw = await _api.getCores();
+    return raw.map(CoreInfo.fromMap).toList();
   }
 
   Future<void> installCore(String name) {
-    return _platformApi.installCore(name);
+    return _api.installCore(name);
   }
 
   Future<void> updateCore(String name) {
-    return _platformApi.updateCore(name);
+    return _api.updateCore(name);
   }
 }
+
+final coreManagerRepositoryProvider = Provider<CoreManagerRepository>((ref) {
+  final api = ref.watch(corePlatformApiProvider);
+  return CoreManagerRepository(api);
+});
