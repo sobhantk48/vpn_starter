@@ -3,10 +3,12 @@ import 'package:vpn_starter/features/core_manager/domain/core_info.dart';
 import 'package:vpn_starter/services/platform/core_platform_api.dart';
 
 class CoreManagerRepository {
-  const CoreManagerRepository();
+  CoreManagerRepository({CorePlatformApi? api}) : _api = api ?? CorePlatformApi();
+
+  final CorePlatformApi _api;
 
   Future<List<CoreInfo>> getInstalledCores() async {
-    final raw = await CorePlatformApi.getCores();
+    final raw = await _api.getInstalledCores();
     return raw.map(CoreInfo.fromMap).toList();
   }
 
@@ -15,14 +17,14 @@ class CoreManagerRepository {
   }
 
   Future<void> installCore(String name) {
-    return CorePlatformApi.installCore(name);
+    return _api.installCore(name);
   }
 
   Future<void> updateCore(String name) {
-    return CorePlatformApi.updateCore(name);
+    return _api.updateCore(name);
   }
 }
 
 final coreManagerRepositoryProvider = Provider<CoreManagerRepository>((ref) {
-  return const CoreManagerRepository();
+  return CoreManagerRepository();
 });

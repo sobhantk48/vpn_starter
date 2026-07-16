@@ -47,7 +47,7 @@ class ConnectionController extends Notifier<ConnectionStateModel> {
 
   Future<void> disconnect() async {
     state = state.copyWith(
-      status: VpnConnectionStatus.stopping,
+      status: VpnConnectionStatus.disconnecting,
       message: 'Stopping...',
     );
 
