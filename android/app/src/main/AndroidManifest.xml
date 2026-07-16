@@ -3,10 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
-        android:name="${applicationName}"
         android:label="vpn_starter"
         android:icon="@mipmap/ic_launcher">
 
@@ -27,8 +27,8 @@
         <service
             android:name=".vpn.MyVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="false"
-            android:foregroundServiceType="dataSync">
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
