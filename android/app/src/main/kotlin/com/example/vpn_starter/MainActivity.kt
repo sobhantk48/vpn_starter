@@ -3,7 +3,6 @@ package com.example.vpn_starter
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
-import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -17,19 +16,14 @@ class MainActivity : FlutterActivity() {
 
     private var pendingPermissionResult: MethodChannel.Result? = null
 
-    private lateinit var logStreamHandler: LogStreamHandler
-    private lateinit var coreManager: CoreManager
-    private lateinit var vpnManager: VpnManager
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        logStreamHandler = LogStreamHandler()
-        coreManager = CoreManager(applicationContext)
-        vpnManager = VpnManager(this, applicationContext, logStreamHandler)
-    }
+    private var logStreamHandler: LogStreamHandler? = null
+    private var coreManager: CoreManager? = null
+    private var vpnManager: VpnManager? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        ensureManagersInitialized()
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -44,14 +38,34 @@ class MainActivity : FlutterActivity() {
         ).setStreamHandler(logStreamHandler)
     }
 
+    private fun ensureManagersInitialized() {
+        if (logStreamHandler == null) {
+            logStreamHandler = LogStreamHandler()
+        }
+
+        if (coreManager == null) {
+            coreManager = CoreManager(applicationContext)
+        }
+
+        if (vpnManager == null) {
+            vpnManager = VpnManager(this, applicationContext, logStreamHandler!!)
+        }
+    }
+
     private fun handleMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        ensureManagersInitialized()
+
+        val logs = logStreamHandler!!
+        val cores = coreManager!!
+        val vpn = vpnManager!!
+
         when (call.method) {
             "requestVpnPermission" -> {
                 requestVpnPermission(result)
             }
 
             "getCores" -> {
-                result.success(coreManager.getCores())
+                result.success(cores.getCores())
             }
 
             "installCore" -> {
@@ -60,7 +74,8 @@ class MainActivity : FlutterActivity() {
                     result.error("INVALID_ARGUMENT", "Missing core name", null)
                     return
                 }
-                coreManager.installCore(name, logStreamHandler)
+
+                cores.installCore(name, logs)
                 result.success(null)
             }
 
@@ -70,7 +85,8 @@ class MainActivity : FlutterActivity() {
                     result.error("INVALID_ARGUMENT", "Missing core name", null)
                     return
                 }
-                coreManager.updateCore(name, logStreamHandler)
+
+                cores.updateCore(name, logs)
                 result.success(null)
             }
 
@@ -78,7 +94,7 @@ class MainActivity : FlutterActivity() {
                 val profileName = call.argument<String>("profileName").orEmpty()
                 val coreName = call.argument<String>("coreName").orEmpty()
 
-                val startResult = vpnManager.start(
+                val startResult = vpn.start(
                     profileName = profileName.ifBlank { "Default Profile" },
                     coreName = coreName.ifBlank { "sing-box" },
                 )
@@ -93,7 +109,7 @@ class MainActivity : FlutterActivity() {
             }
 
             "stopCore" -> {
-                vpnManager.stop()
+                vpn.stop()
                 result.success(true)
             }
 
@@ -102,9 +118,11 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun requestVpnPermission(result: MethodChannel.Result) {
+        ensureManagersInitialized()
+
         val intent = VpnService.prepare(this)
-       if (intent == null) {
-            logStreamHandler.log("[vpn] permission already granted")
+        if (intent == null) {
+            logStreamHandler?.log("[vpn] permission already granted")
             result.success(true)
             return
         }
@@ -119,7 +137,7 @@ class MainActivity : FlutterActivity() {
 
         if (requestCode == vpnPermissionRequestCode) {
             val granted = resultCode == Activity.RESULT_OK
-            logStreamHandler.log("[vpn] permission result: $granted")
+            logStreamHandler?.log("[vpn] permission result: $granted")
             pendingPermissionResult?.success(granted)
             pendingPermissionResult = null
         }
