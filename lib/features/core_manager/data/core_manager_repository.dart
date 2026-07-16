@@ -7,9 +7,8 @@ class CoreManagerRepository {
 
   final CorePlatformApi _api;
 
-  Future<List<CoreInfo>> getInstalledCores() async {
-    final raw = await _api.getInstalledCores();
-    return raw.map(CoreInfo.fromMap).toList();
+  Future<List<CoreInfo>> getInstalledCores() {
+    return _api.getInstalledCores();
   }
 
   Future<List<CoreInfo>> getCores() {
