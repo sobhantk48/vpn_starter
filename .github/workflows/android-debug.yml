@@ -13,7 +13,7 @@ on:
 jobs:
   android-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -32,16 +32,29 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show tool versions
+      - name: Show environment
         run: |
+          echo "PWD=$(pwd)"
           java -version
           flutter --version
           flutter doctor -v
 
-      - name: Clean duplicate Gradle settings file if present
+      - name: Inspect repository root
+        run: |
+          ls -la
+          echo "=== android ==="
+          ls -la android || true
+          echo "=== android/app ==="
+          ls -la android/app || true
+
+      - name: Remove duplicate Gradle settings file if present
         run: |
           rm -f android/settings.gradle.kts
+          echo "=== android after cleanup ==="
           ls -la android
+
+      - name: Clean Flutter project
+        run: flutter clean
 
       - name: Get dependencies
         run: flutter pub get
@@ -49,20 +62,41 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      - name: Build debug apk
-        run: flutter build apk --debug
+      - name: Build debug APK
+        continue-on-error: true
+        run: |
+          flutter build apk --debug --verbose
 
-      - name: List APK outputs
+      - name: Inspect Flutter build outputs
         if: always()
         run: |
           echo "=== find build *.apk ==="
           find build -type f | grep -i '\.apk$' || true
+
           echo "=== find android *.apk ==="
           find android -type f | grep -i '\.apk$' || true
+
           echo "=== build/app/outputs ==="
           ls -R build/app/outputs || true
+
           echo "=== android/app/build/outputs ==="
           ls -R android/app/build/outputs || true
+
+          echo "=== build dir tree (top 4 levels) ==="
+          find build -maxdepth 4 -type f | sort || true
+
+          echo "=== android/app/build dir tree (top 6 levels) ==="
+          find android/app/build -maxdepth 6 -type f | sort || true
+
+      - name: Fail if no APK exists
+        if: always()
+        run: |
+          if find build android -type f | grep -qi '\.apk$'; then
+            echo "APK file found."
+          else
+            echo "No APK file found anywhere under build/ or android/."
+            exit 1
+          fi
 
       - name: Upload APK artifacts
         if: always()
@@ -71,5 +105,5 @@ jobs:
           name: android-debug-apk
           if-no-files-found: warn
           path: |
-            build/app/outputs/flutter-apk/*.apk
-            android/app/build/outputs/**/*.apk
+            build/**/*.apk
+            android/**/*.apk
