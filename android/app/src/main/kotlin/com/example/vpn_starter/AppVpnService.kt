@@ -5,9 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.net.VpnService
 import androidx.core.app.NotificationCompat
 
 class AppVpnService : VpnService() {
@@ -30,7 +30,10 @@ class AppVpnService : VpnService() {
 
     private fun startVpn(profileName: String, coreName: String) {
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("VPN running: $profileName / $coreName"))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification("VPN running: $profileName / $coreName")
+        )
 
         if (vpnInterface != null) {
             return
@@ -41,8 +44,18 @@ class AppVpnService : VpnService() {
             .addAddress("10.10.0.2", 24)
             .addRoute("0.0.0.0", 0)
             .addDnsServer("1.1.1.1")
+            .addDnsServer("8.8.8.8")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setMetered(false)
+        }
 
         vpnInterface = builder.establish()
+
+        if (vpnInterface == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     private fun stopVpn() {
@@ -50,6 +63,7 @@ class AppVpnService : VpnService() {
             vpnInterface?.close()
         } catch (_: Exception) {
         }
+
         vpnInterface = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
