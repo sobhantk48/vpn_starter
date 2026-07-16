@@ -39,20 +39,6 @@ jobs:
           flutter --version
           flutter doctor -v
 
-      - name: Inspect repository root
-        run: |
-          ls -la
-          echo "=== android ==="
-          ls -la android || true
-          echo "=== android/app ==="
-          ls -la android/app || true
-
-      - name: Remove duplicate Gradle settings file if present
-        run: |
-          rm -f android/settings.gradle.kts
-          echo "=== android after cleanup ==="
-          ls -la android
-
       - name: Clean Flutter project
         run: flutter clean
 
@@ -62,12 +48,21 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      - name: Build debug APK
+      - name: Build debug APK (capture full logs)
+        id: build_apk
         continue-on-error: true
         run: |
-          flutter build apk --debug --verbose
+          set -o pipefail
+          flutter build apk --debug --verbose 2>&1 | tee flutter_build.log
+          echo "build_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
-      - name: Inspect Flutter build outputs
+      - name: Print Kotlin/Gradle error summary
+        if: always()
+        run: |
+          echo "=== Kotlin/Gradle important lines ==="
+          grep -nE "e: |Compilation error|What went wrong|FAILURE: Build failed|error:|Exception|Caused by:" flutter_build.log | tail -n 300 || true
+
+      - name: Inspect APK outputs
         if: always()
         run: |
           echo "=== find any *.apk in repo ==="
@@ -79,27 +74,30 @@ jobs:
           echo "=== android/app/build/outputs ==="
           ls -R android/app/build/outputs || true
 
-          echo "=== build dir tree (top 6 levels) ==="
-          find build -maxdepth 6 -type f | sort || true
+      - name: Upload logs and APK artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-logs-and-apk
+          if-no-files-found: warn
+          path: |
+            flutter_build.log
+            **/*.apk
 
-          echo "=== android/app/build dir tree (top 8 levels) ==="
-          find android/app/build -maxdepth 8 -type f | sort || true
+      - name: Fail if build failed
+        if: always()
+        run: |
+          if [ "${{ steps.build_apk.outputs.build_exit }}" != "0" ]; then
+            echo "Build failed (exit=${{ steps.build_apk.outputs.build_exit }}). See flutter_build.log artifact."
+            exit 1
+          fi
 
-      - name: Fail if no APK exists
+      - name: Fail if APK missing
         if: always()
         run: |
           if [ -z "$(find . -type f -name "*.apk" -print -quit)" ]; then
-            echo "Error: No APK file found anywhere in repository."
+            echo "Build succeeded but no APK found."
             exit 1
           else
             echo "APK found successfully."
           fi
-
-      - name: Upload APK artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-debug-apk
-          if-no-files-found: warn
-          path: |
-            **/*.apk
