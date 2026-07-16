@@ -2,10 +2,10 @@ package com.example.vpn_starter
 
 import android.content.Intent
 import android.net.VpnService
+import com.example.vpn_starter.vpn.MyVpnService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import com.example.vpn_starter.vpn.MyVpnService
 
 class MainActivity : FlutterActivity() {
 
@@ -28,25 +28,27 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "startVpn" -> {
-                        val configJson = call.argument<String>("config") ?: ""
-                        if (configJson.isBlank()) {
+                        val config = call.argument<String>("config").orEmpty()
+                        if (config.isBlank()) {
                             result.error("INVALID_CONFIG", "config is empty", null)
                             return@setMethodCallHandler
                         }
 
-                        val serviceIntent = Intent(this, MyVpnService::class.java).apply {
-                            action = MyVpnService.ACTION_START
-                            putExtra(MyVpnService.EXTRA_CONFIG_JSON, configJson)
-                        }
-                        startService(serviceIntent)
+                        startService(
+                            Intent(this, MyVpnService::class.java).apply {
+                                action = MyVpnService.ACTION_START
+                                putExtra(MyVpnService.EXTRA_CONFIG_JSON, config)
+                            }
+                        )
                         result.success(true)
                     }
 
                     "stopVpn" -> {
-                        val serviceIntent = Intent(this, MyVpnService::class.java).apply {
-                            action = MyVpnService.ACTION_STOP
-                        }
-                        startService(serviceIntent)
+                        startService(
+                            Intent(this, MyVpnService::class.java).apply {
+                                action = MyVpnService.ACTION_STOP
+                            }
+                        )
                         result.success(true)
                     }
 

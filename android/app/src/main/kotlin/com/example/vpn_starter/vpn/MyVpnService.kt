@@ -54,17 +54,17 @@ class MyVpnService : VpnService() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification("VPN is starting..."))
 
-        val builder = Builder()
+        val tun = Builder()
             .setSession("V2ray STK")
             .setMtu(1500)
             .addAddress("10.10.0.2", 30)
             .addDnsServer("1.1.1.1")
             .addDnsServer("8.8.8.8")
             .addRoute("0.0.0.0", 0)
+            .establish() ?: throw IllegalStateException("Failed to establish TUN")
 
-        tunInterface = builder.establish()
-        val pfd = tunInterface ?: throw IllegalStateException("Failed to establish VPN interface")
-        val tunFd = pfd.fd
+        tunInterface = tun
+        val tunFd = tun.fd
 
         bridge.init(filesDir.absolutePath, cacheDir.absolutePath)
         bridge.start(configJson, tunFd)
@@ -72,22 +72,13 @@ class MyVpnService : VpnService() {
         isRunningGlobal = true
 
         val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification("VPN is connected"))
+        nm.notify(NOTIF_ID, buildNotification("VPN connected"))
     }
 
     private fun stopVpn() {
-        try {
-            bridge.stop()
-        } catch (_: Throwable) {
-        }
-
-        try {
-            tunInterface?.close()
-        } catch (_: Throwable) {
-        } finally {
-            tunInterface = null
-        }
-
+        runCatching { bridge.stop() }
+        runCatching { tunInterface?.close() }
+        tunInterface = null
         isRunningGlobal = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -105,17 +96,15 @@ class MyVpnService : VpnService() {
                 "VPN Service",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(content: String): Notification {
-        val openAppIntent = Intent(this, MainActivity::class.java)
-        val openAppPendingIntent = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            openAppIntent,
+            Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
@@ -123,7 +112,7 @@ class MyVpnService : VpnService() {
             .setContentTitle("V2ray STK")
             .setContentText(content)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(openAppPendingIntent)
+            .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
     }

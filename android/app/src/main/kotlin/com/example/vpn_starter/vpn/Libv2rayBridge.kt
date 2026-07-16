@@ -56,14 +56,12 @@ class Libv2rayBridge {
     }
 
     @Synchronized
-    @Throws(Exception::class)
     fun start(configJson: String, tunFd: Int) {
-        val c = controller ?: error("Bridge is not initialized")
+        val c = controller ?: error("Bridge not initialized")
         c.startLoop(configJson, tunFd)
     }
 
     @Synchronized
-    @Throws(Exception::class)
     fun stop() {
         controller?.stopLoop()
     }
@@ -76,9 +74,8 @@ class Libv2rayBridge {
         return Libv2ray.checkVersionX()
     }
 
-    @Throws(Exception::class)
     fun measureDelay(url: String): Long {
-        val c = controller ?: error("Bridge is not initialized")
+        val c = controller ?: error("Bridge not initialized")
         return c.measureDelay(url)
     }
 
