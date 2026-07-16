@@ -1,4 +1,4 @@
-name: Android Debug Build (Flutter)
+name: Android Debug Build (Verbose Logs)
 
 on:
   push:
@@ -14,30 +14,11 @@ on:
 jobs:
   android-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Validate required files
-        run: |
-          echo "Checking required project files..."
-          test -f pubspec.yaml || (echo "pubspec.yaml not found" && exit 1)
-          test -f android/app/build.gradle.kts || (echo "android/app/build.gradle.kts not found" && exit 1)
-
-          # اگر libbox.aar نیازیه، باید داخل ریپو باشه
-          if [ ! -f android/app/libs/libbox.aar ]; then
-            echo "ERROR: android/app/libs/libbox.aar not found in repository"
-            echo "If your app depends on it, commit it with: git add -f android/app/libs/libbox.aar"
-            exit 1
-          fi
-
-      - name: Remove conflicting Gradle file (Groovy)
-        run: |
-          rm -f android/app/build.gradle
-          echo "Remaining gradle files in android/app:"
-          ls -la android/app | grep build.gradle || true
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -52,30 +33,105 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Environment info
+      - name: Prepare logs folder
+        run: mkdir -p ci_logs
+
+      - name: Environment snapshot
         run: |
-          echo "PWD=$(pwd)"
-          java -version
-          flutter --version
-          flutter doctor -v
+          {
+            echo "=== DATE ==="
+            date -u
+            echo "=== PWD ==="
+            pwd
+            echo "=== JAVA ==="
+            java -version
+            echo "=== FLUTTER ==="
+            flutter --version
+            echo "=== FLUTTER DOCTOR ==="
+            flutter doctor -v
+            echo "=== GIT STATUS ==="
+            git status --porcelain=v1
+            echo "=== android/app files ==="
+            ls -la android/app || true
+            echo "=== gradle files ==="
+            find android -maxdepth 3 -type f \( -name "build.gradle" -o -name "build.gradle.kts" -o -name "settings.gradle" -o -name "settings.gradle.kts" \) -print || true
+          } 2>&1 | tee ci_logs/00_environment.txt
 
-      - name: Flutter pub get (verbose)
-        run: flutter pub get -v
+      - name: Remove conflicting android/app/build.gradle (if kts exists)
+        run: |
+          if [ -f android/app/build.gradle.kts ] && [ -f android/app/build.gradle ]; then
+            echo "Both build.gradle and build.gradle.kts found. Removing build.gradle to avoid conflict."
+            rm -f android/app/build.gradle
+          fi
+          ls -la android/app | tee ci_logs/01_android_app_listing.txt
 
-      - name: Build debug APK (verbose)
-        run: flutter build apk --debug --verbose
+      - name: Verify critical files
+        run: |
+          set -e
+          test -f pubspec.yaml
+          test -f android/app/build.gradle.kts
+          if [ ! -f android/app/libs/libbox.aar ]; then
+            echo "ERROR: android/app/libs/libbox.aar is missing" | tee -a ci_logs/02_verify.txt
+            exit 1
+          fi
+          {
+            echo "OK: pubspec.yaml exists"
+            echo "OK: android/app/build.gradle.kts exists"
+            echo "OK: android/app/libs/libbox.aar exists"
+          } | tee ci_logs/02_verify.txt
 
-      - name: Show output tree (always)
+      - name: Flutter clean (capture full logs)
+        run: |
+          set +e
+          flutter clean --verbose 2>&1 | tee ci_logs/03_flutter_clean.txt
+          echo "exit_code=$?" | tee -a ci_logs/03_flutter_clean.txt
+          exit 0
+
+      - name: Flutter pub get (capture full logs)
+        id: pubget
+        run: |
+          set +e
+          flutter pub get -v 2>&1 | tee ci_logs/04_flutter_pub_get.txt
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" | tee -a ci_logs/04_flutter_pub_get.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build debug APK (capture full logs)
+        id: buildapk
+        run: |
+          set +e
+          flutter build apk --debug --verbose 2>&1 | tee ci_logs/05_flutter_build_apk_debug.txt
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" | tee -a ci_logs/05_flutter_build_apk_debug.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Collect Gradle logs and outputs (always)
         if: always()
         run: |
-          echo "=== APK files ==="
-          find . -type f -name "*.apk" -print || true
-          echo "=== build/app/outputs ==="
-          ls -R build/app/outputs || true
-          echo "=== android/app/build/outputs ==="
-          ls -R android/app/build/outputs || true
+          set +e
+          echo "=== Search APK ===" | tee ci_logs/06_outputs.txt
+          find . -type f -name "*.apk" -print | tee -a ci_logs/06_outputs.txt
+          echo "=== build/app/outputs ===" | tee -a ci_logs/06_outputs.txt
+          ls -R build/app/outputs 2>&1 | tee -a ci_logs/06_outputs.txt
+          echo "=== android/app/build/outputs ===" | tee -a ci_logs/06_outputs.txt
+          ls -R android/app/build/outputs 2>&1 | tee -a ci_logs/06_outputs.txt
+          echo "=== Gradle cache logs (if any) ===" | tee -a ci_logs/06_outputs.txt
+          find ~/.gradle -maxdepth 5 -type f \( -name "*.log" -o -name "hs_err_pid*.log" \) -print 2>/dev/null | tee -a ci_logs/06_outputs.txt
+          echo "=== build/reports tree ===" | tee -a ci_logs/06_outputs.txt
+          find . -type d -path "*/build/reports*" -print 2>/dev/null | tee -a ci_logs/06_outputs.txt
+          exit 0
 
-      - name: Upload APK artifacts
+      - name: Upload ci_logs artifact (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          if-no-files-found: warn
+          path: ci_logs/**
+
+      - name: Upload APK artifact (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -85,12 +141,27 @@ jobs:
             build/app/outputs/flutter-apk/*.apk
             android/app/build/outputs/**/*.apk
 
-      - name: Upload logs (always)
+      - name: Final fail with explicit reason
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          if-no-files-found: warn
-          path: |
-            **/.dart_tool/**
-            **/build/**/reports/**
+        run: |
+          pub_code="${{ steps.pubget.outputs.code }}"
+          build_code="${{ steps.buildapk.outputs.code }}"
+          echo "pub_get_exit_code=$pub_code"
+          echo "build_apk_exit_code=$build_code"
+
+          if [ "$pub_code" != "0" ]; then
+            echo "❌ flutter pub get failed. Check artifact: ci-logs/04_flutter_pub_get.txt"
+            exit 1
+          fi
+
+          if [ "$build_code" != "0" ]; then
+            echo "❌ flutter build apk failed. Check artifact: ci-logs/05_flutter_build_apk_debug.txt"
+            exit 1
+          fi
+
+          if ! find . -type f -name "*.apk" | grep -q .; then
+            echo "❌ Build succeeded but no APK found. Check ci-logs/06_outputs.txt"
+            exit 1
+          fi
+
+          echo "✅ Build and APK detection succeeded."
