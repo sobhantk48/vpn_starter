@@ -3,7 +3,7 @@ package com.example.vpn_starter
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
-import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -11,147 +11,100 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private lateinit var coreManager: CoreManager
-    private lateinit var vpnManager: VpnManager
-    private lateinit var logStreamHandler: LogStreamHandler
+    private val methodChannelName = "vpn_starter/core"
+    private val logsChannelName = "vpn_starter/logs"
 
+    private val vpnPermissionRequestCode = 1001
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var logsSink: EventChannel.EventSink? = null
 
-    private val vpnPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val methodResult = pendingPermissionResult
-            pendingPermissionResult = null
-
-            val granted = result.resultCode == Activity.RESULT_OK
-            logStreamHandler.log("[vpn] permission result granted=$granted")
-
-            methodResult?.success(granted)
-        }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        coreManager = CoreManager(applicationContext)
-        logStreamHandler = LogStreamHandler()
-        vpnManager = VpnManager(
-            activity = this,
-            appContext = applicationContext,
-            logger = logStreamHandler,
-        )
-
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            CORE_CHANNEL,
+            methodChannelName
         ).setMethodCallHandler { call, result ->
-            handleCoreCall(call, result)
+            handleMethodCall(call, result)
         }
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            LOGS_CHANNEL,
-        ).setStreamHandler(logStreamHandler)
+            logsChannelName
+        ).setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                logsSink = events
+                logsSink?.success("Native log stream attached")
+            }
 
-        logStreamHandler.log("[boot] native bridge ready")
+            override fun onCancel(arguments: Any?) {
+                logsSink = null
+            }
+        })
     }
 
-    private fun handleCoreCall(call: MethodCall, result: MethodChannel.Result) {
+    private fun handleMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "getCores" -> {
-                result.success(coreManager.getCores())
-            }
-
-            "installCore" -> {
-                val name = call.argument<String>("name")
-                if (name.isNullOrBlank()) {
-                    result.error("invalid_args", "Core name is required", null)
-                    return
-                }
-
-                try {
-                    coreManager.installCore(name, logStreamHandler)
-                    result.success(null)
-                } catch (e: Exception) {
-                    result.error("install_failed", e.message, null)
-                }
-            }
-
-            "updateCore" -> {
-                val name = call.argument<String>("name")
-                if (name.isNullOrBlank()) {
-                    result.error("invalid_args", "Core name is required", null)
-                    return
-                }
-
-                try {
-                    coreManager.updateCore(name, logStreamHandler)
-                    result.success(null)
-                } catch (e: Exception) {
-                    result.error("update_failed", e.message, null)
-                }
-            }
-
-            "requestVpnPermission" -> {
-                requestVpnPermission(result)
-            }
-
+            "requestVpnPermission" -> requestVpnPermission(result)
             "startCore" -> {
-                val profileName = call.argument<String>("profileName")
-                val coreName = call.argument<String>("coreName")
-
-                if (profileName.isNullOrBlank() || coreName.isNullOrBlank()) {
-                    result.error("invalid_args", "profileName and coreName are required", null)
-                    return
-                }
-
-                when (val startResult = vpnManager.start(profileName, coreName)) {
-                    is VpnStartResult.Started -> result.success(true)
-                    is VpnStartResult.PermissionRequired -> {
-                        result.error(
-                            "vpn_permission_required",
-                            "VPN permission is required before start",
-                            null,
-                        )
-                    }
-
-                    is VpnStartResult.Error -> {
-                        result.error("vpn_start_failed", startResult.message, null)
-                    }
-                }
+                logsSink?.success("startCore called")
+                result.success(true)
             }
-
             "stopCore" -> {
-                try {
-                    vpnManager.stop()
-                    result.success(true)
-                } catch (e: Exception) {
-                    result.error("vpn_stop_failed", e.message, null)
-                }
+                logsSink?.success("stopCore called")
+                result.success(true)
             }
-
+            "getInstalledCores" -> {
+                result.success(
+                    listOf(
+                        mapOf(
+                            "name" to "sing-box",
+                            "installed" to false,
+                            "version" to null,
+                            "updateAvailable" to false,
+                            "downloading" to false
+                        )
+                    )
+                )
+            }
+            "installCore" -> {
+                val name = call.argument<String>("name") ?: "unknown"
+                logsSink?.success("installCore called for $name")
+                result.success(null)
+            }
+            "updateCore" -> {
+                val name = call.argument<String>("name") ?: "unknown"
+                logsSink?.success("updateCore called for $name")
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }
 
     private fun requestVpnPermission(result: MethodChannel.Result) {
-        if (pendingPermissionResult != null) {
-            result.error("busy", "Another VPN permission request is already active", null)
-            return
-        }
-
-        val prepareIntent: Intent? = VpnService.prepare(this)
-        if (prepareIntent == null) {
-            logStreamHandler.log("[vpn] permission already granted")
+        val intent = VpnService.prepare(this)
+        if (intent == null) {
             result.success(true)
             return
         }
 
-        logStreamHandler.log("[vpn] opening permission dialog")
         pendingPermissionResult = result
-        vpnPermissionLauncher.launch(prepareIntent)
+        startActivityForResult(intent, vpnPermissionRequestCode)
     }
 
-    companion object {
-        private const val CORE_CHANNEL = "vpn_starter/core"
-        private const val LOGS_CHANNEL = "vpn_starter/logs"
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == vpnPermissionRequestCode) {
+            val granted = resultCode == Activity.RESULT_OK
+            pendingPermissionResult?.success(granted)
+            pendingPermissionResult = null
+            logsSink?.success("VPN permission result: $granted")
+        }
     }
 }
