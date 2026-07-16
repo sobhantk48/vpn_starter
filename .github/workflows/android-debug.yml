@@ -1,4 +1,4 @@
-name: Android Debug Build
+name: Android Debug Build (Flutter)
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - master
       - develop
       - dev
+      - 'feat/**'
   pull_request:
   workflow_dispatch:
 
@@ -19,84 +20,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required files
+        run: |
+          echo "Checking required project files..."
+          test -f pubspec.yaml || (echo "pubspec.yaml not found" && exit 1)
+          test -f android/app/build.gradle.kts || (echo "android/app/build.gradle.kts not found" && exit 1)
+
+          # اگر libbox.aar نیازیه، باید داخل ریپو باشه
+          if [ ! -f android/app/libs/libbox.aar ]; then
+            echo "ERROR: android/app/libs/libbox.aar not found in repository"
+            echo "If your app depends on it, commit it with: git add -f android/app/libs/libbox.aar"
+            exit 1
+          fi
+
+      - name: Remove conflicting Gradle file (Groovy)
+        run: |
+          rm -f android/app/build.gradle
+          echo "Remaining gradle files in android/app:"
+          ls -la android/app | grep build.gradle || true
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.5'
           channel: stable
           cache: true
 
-      - name: Show environment
+      - name: Environment info
         run: |
           echo "PWD=$(pwd)"
           java -version
           flutter --version
           flutter doctor -v
 
-      - name: Inspect repository root
-        run: |
-          ls -la
-          echo "=== android ==="
-          ls -la android || true
-          echo "=== android/app ==="
-          ls -la android/app || true
+      - name: Flutter pub get (verbose)
+        run: flutter pub get -v
 
-      - name: Remove duplicate Gradle settings file if present
-        run: |
-          rm -f android/settings.gradle.kts
-          echo "=== android after cleanup ==="
-          ls -la android
+      - name: Build debug APK (verbose)
+        run: flutter build apk --debug --verbose
 
-      - name: Clean Flutter project
-        run: flutter clean
-
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Build debug APK
-        continue-on-error: true
-        run: |
-          flutter build apk --debug --verbose
-
-      - name: Inspect Flutter build outputs
+      - name: Show output tree (always)
         if: always()
         run: |
-          echo "=== find build *.apk ==="
-          find build -type f | grep -i '\.apk$' || true
-
-          echo "=== find android *.apk ==="
-          find android -type f | grep -i '\.apk$' || true
-
+          echo "=== APK files ==="
+          find . -type f -name "*.apk" -print || true
           echo "=== build/app/outputs ==="
           ls -R build/app/outputs || true
-
           echo "=== android/app/build/outputs ==="
           ls -R android/app/build/outputs || true
-
-          echo "=== build dir tree (top 4 levels) ==="
-          find build -maxdepth 4 -type f | sort || true
-
-          echo "=== android/app/build dir tree (top 6 levels) ==="
-          find android/app/build -maxdepth 6 -type f | sort || true
-
-      - name: Fail if no APK exists
-        if: always()
-        run: |
-          if find build android -type f | grep -qi '\.apk$'; then
-            echo "APK file found."
-          else
-            echo "No APK file found anywhere under build/ or android/."
-            exit 1
-          fi
 
       - name: Upload APK artifacts
         if: always()
@@ -105,5 +82,15 @@ jobs:
           name: android-debug-apk
           if-no-files-found: warn
           path: |
-            build/**/*.apk
-            android/**/*.apk
+            build/app/outputs/flutter-apk/*.apk
+            android/app/build/outputs/**/*.apk
+
+      - name: Upload logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          if-no-files-found: warn
+          path: |
+            **/.dart_tool/**
+            **/build/**/reports/**
