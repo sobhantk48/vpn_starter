@@ -70,11 +70,8 @@ jobs:
       - name: Inspect Flutter build outputs
         if: always()
         run: |
-          echo "=== find build *.apk ==="
-          find build -type f | grep -i '\.apk$' || true
-
-          echo "=== find android *.apk ==="
-          find android -type f | grep -i '\.apk$' || true
+          echo "=== find any *.apk in repo ==="
+          find . -type f -name "*.apk" -print || true
 
           echo "=== build/app/outputs ==="
           ls -R build/app/outputs || true
@@ -82,20 +79,20 @@ jobs:
           echo "=== android/app/build/outputs ==="
           ls -R android/app/build/outputs || true
 
-          echo "=== build dir tree (top 4 levels) ==="
-          find build -maxdepth 4 -type f | sort || true
+          echo "=== build dir tree (top 6 levels) ==="
+          find build -maxdepth 6 -type f | sort || true
 
-          echo "=== android/app/build dir tree (top 6 levels) ==="
-          find android/app/build -maxdepth 6 -type f | sort || true
+          echo "=== android/app/build dir tree (top 8 levels) ==="
+          find android/app/build -maxdepth 8 -type f | sort || true
 
       - name: Fail if no APK exists
         if: always()
         run: |
-          if find build android -type f | grep -qi '\.apk$'; then
-            echo "APK file found."
-          else
-            echo "No APK file found anywhere under build/ or android/."
+          if [ -z "$(find . -type f -name "*.apk" -print -quit)" ]; then
+            echo "Error: No APK file found anywhere in repository."
             exit 1
+          else
+            echo "APK found successfully."
           fi
 
       - name: Upload APK artifacts
@@ -105,5 +102,4 @@ jobs:
           name: android-debug-apk
           if-no-files-found: warn
           path: |
-            build/**/*.apk
-            android/**/*.apk
+            **/*.apk
