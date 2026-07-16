@@ -20,7 +20,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.vpn_starter"
-        minSdk = flutter.minSdkVersion
+        // تغییر از flutter.minSdkVersion به 24
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
