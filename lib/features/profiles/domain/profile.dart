@@ -6,11 +6,6 @@ class Profile {
     this.isActive = false,
   });
 
-  final String id;
-  final String name;
-  final String coreName;
-  final bool isActive;
-
   factory Profile.defaultProfile() {
     return const Profile(
       id: 'default',
@@ -19,6 +14,11 @@ class Profile {
       isActive: true,
     );
   }
+
+  final String id;
+  final String name;
+  final String coreName;
+  final bool isActive;
 
   Profile copyWith({
     String? id,

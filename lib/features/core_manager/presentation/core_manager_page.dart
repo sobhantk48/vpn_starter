@@ -24,7 +24,9 @@ class CoreManagerPage extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: controller.refresh,
+            onRefresh: () async {
+              ref.invalidate(coreManagerControllerProvider);
+            },
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: cores.length,
@@ -72,6 +74,8 @@ class _CoreTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final installedText = core.installed ? 'Installed' : 'Not installed';
     final versionText = core.version == null ? '' : ' • ${core.version}';
+    final updateText = core.updateAvailable ? ' • Update available' : '';
+    final downloadingText = core.downloading ? ' • Downloading' : '';
 
     return Card(
       child: Padding(
@@ -87,7 +91,9 @@ class _CoreTile extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 6),
-                  Text('$installedText$versionText'),
+                  Text(
+                    '$installedText$versionText$updateText$downloadingText',
+                  ),
                 ],
               ),
             ),

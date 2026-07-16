@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vpn_starter/core/logs/logs_repository.dart';
 
+final logsRepositoryProvider = Provider<LogsRepository>((ref) {
+  return LogsRepository();
+});
+
 final logsControllerProvider =
     StateNotifierProvider<LogsController, List<String>>((ref) {
   final repository = ref.watch(logsRepositoryProvider);
@@ -11,8 +15,9 @@ final logsControllerProvider =
 
 class LogsController extends StateNotifier<List<String>> {
   LogsController(this._repository) : super(const []) {
-    _subscription = _repository.watchLogs().listen((line) {
-      state = [...state, line];
+    _subscription = _repository.streamLogs().listen((line) {
+      final next = [...state, line];
+      state = next.length > 300 ? next.sublist(next.length - 300) : next;
     });
   }
 
