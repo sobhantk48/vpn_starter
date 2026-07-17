@@ -43,7 +43,8 @@ class CorePlatformApi {
   }
 
   static Future<bool> requestVpnPermission() async {
-    final result = await _coreChannel.invokeMethod<bool>('requestVpnPermission');
+    final result =
+        await _coreChannel.invokeMethod<bool>('requestVpnPermission');
     return result ?? false;
   }
 
@@ -63,6 +64,11 @@ class CorePlatformApi {
 
   static Future<bool> stopCore() async {
     final result = await _coreChannel.invokeMethod<bool>('stopCore');
+    return result ?? false;
+  }
+
+  static Future<bool> vpnStatus() async {
+    final result = await _coreChannel.invokeMethod<bool>('vpnStatus');
     return result ?? false;
   }
 }

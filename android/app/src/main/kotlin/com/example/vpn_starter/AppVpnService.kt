@@ -8,12 +8,33 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class AppVpnService : VpnService() {
+
+    companion object {
+        private const val TAG = "AppVpnService"
+
+        const val ACTION_START = "com.example.vpn_starter.action.START"
+        const val ACTION_STOP = "com.example.vpn_starter.action.STOP"
+
+        const val EXTRA_PROFILE_NAME = "extra_profile_name"
+        const val EXTRA_CORE_NAME = "extra_core_name"
+
+        private const val CHANNEL_ID = "vpn_starter_service"
+        private const val NOTIFICATION_ID = 2001
+
+        @Volatile
+        var isRunningGlobal: Boolean = false
+            private set
+    }
+
     private var vpnInterface: ParcelFileDescriptor? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand action=${intent?.action} startId=$startId")
+
         when (intent?.action) {
             ACTION_START -> {
                 val profileName = intent.getStringExtra(EXTRA_PROFILE_NAME).orEmpty()
@@ -22,60 +43,112 @@ class AppVpnService : VpnService() {
             }
 
             ACTION_STOP -> {
-                stopVpn()
+                stopVpnInternal()
+                stopSelf()
+            }
+
+            else -> {
+                Log.w(TAG, "Unknown or null action: ${intent?.action}")
             }
         }
+
         return START_STICKY
     }
 
     private fun startVpn(profileName: String, coreName: String) {
-        createNotificationChannel()
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification("VPN running: $profileName / $coreName")
-        )
-
-        if (vpnInterface != null) {
+        if (profileName.isBlank()) {
+            Log.e(TAG, "Cannot start VPN: profileName is blank")
+            stopSelf()
             return
         }
 
-        val builder = Builder()
-            .setSession("vpn_starter")
-            .addAddress("10.10.0.2", 24)
-            .addRoute("0.0.0.0", 0)
-            .addDnsServer("1.1.1.1")
-            .addDnsServer("8.8.8.8")
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            builder.setMetered(false)
+        if (coreName.isBlank()) {
+            Log.e(TAG, "Cannot start VPN: coreName is blank")
+            stopSelf()
+            return
         }
 
-        vpnInterface = builder.establish()
+        if (isRunningGlobal && vpnInterface != null) {
+            Log.w(TAG, "VPN already running, ignoring duplicate start")
+            return
+        }
 
-        if (vpnInterface == null) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+        createNotificationChannel()
+
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification("VPN starting: $profileName / $coreName")
+        )
+
+        try {
+            val builder = Builder()
+                .setSession("vpn_starter")
+                .setMtu(1500)
+                .addAddress("10.10.0.2", 24)
+                .addRoute("0.0.0.0", 0)
+                .addDnsServer("1.1.1.1")
+                .addDnsServer("8.8.8.8")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setMetered(false)
+            }
+
+            val established = builder.establish()
+            if (established == null) {
+                Log.e(TAG, "builder.establish() returned null")
+                stopVpnInternal()
+                stopSelf()
+                return
+            }
+
+            vpnInterface = established
+            isRunningGlobal = true
+
+            Log.i(TAG, "VPN established successfully")
+
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.notify(
+                NOTIFICATION_ID,
+                buildNotification("VPN connected: $profileName / $coreName")
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to establish VPN", e)
+            stopVpnInternal()
             stopSelf()
         }
     }
 
-    private fun stopVpn() {
+    private fun stopVpnInternal() {
+        Log.d(TAG, "Stopping VPN")
+
         try {
             vpnInterface?.close()
-        } catch (_: Exception) {
+            Log.d(TAG, "VPN interface closed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to close VPN interface", e)
         }
 
         vpnInterface = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        isRunningGlobal = false
+
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to stop foreground service", e)
+        }
     }
 
     override fun onDestroy() {
-        try {
-            vpnInterface?.close()
-        } catch (_: Exception) {
-        }
-        vpnInterface = null
+        Log.d(TAG, "onDestroy called")
+        stopVpnInternal()
         super.onDestroy()
+    }
+
+    override fun onRevoke() {
+        Log.w(TAG, "VPN permission revoked by system")
+        stopVpnInternal()
+        stopSelf()
+        super.onRevoke()
     }
 
     private fun buildNotification(content: String): Notification {
@@ -114,16 +187,5 @@ class AppVpnService : VpnService() {
         } else {
             0
         }
-    }
-
-    companion object {
-        const val ACTION_START = "com.example.vpn_starter.action.START"
-        const val ACTION_STOP = "com.example.vpn_starter.action.STOP"
-
-        const val EXTRA_PROFILE_NAME = "extra_profile_name"
-        const val EXTRA_CORE_NAME = "extra_core_name"
-
-        private const val CHANNEL_ID = "vpn_starter_service"
-        private const val NOTIFICATION_ID = 2001
     }
 }

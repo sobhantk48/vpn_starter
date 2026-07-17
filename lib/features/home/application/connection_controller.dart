@@ -24,6 +24,7 @@ class ConnectionUiState {
   final String? activeCoreName;
 
   bool get isConnected => status == VpnUiStatus.connected;
+
   bool get isBusy =>
       status == VpnUiStatus.connecting || status == VpnUiStatus.disconnecting;
 
@@ -74,21 +75,40 @@ class ConnectionController extends StateNotifier<ConnectionUiState> {
       final granted = await CorePlatformApi.requestVpnPermission();
       if (!granted) {
         state = state.copyWith(
-          status: VpnUiStatus.error,
-          message: 'VPN permission denied',
+          status: VpnUiStatus.disconnected,
+          message: 'VPN permission not granted',
         );
         return;
       }
 
       state = state.copyWith(
         status: VpnUiStatus.connecting,
-        message: 'Starting VPN core...',
+        message: 'Starting VPN service...',
       );
 
-      await CorePlatformApi.startCore(
+      final started = await CorePlatformApi.startCore(
         profileName: profileName,
         coreName: coreName,
       );
+
+      if (!started) {
+        state = state.copyWith(
+          status: VpnUiStatus.error,
+          message: 'Failed to start VPN service',
+        );
+        return;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      final running = await CorePlatformApi.vpnStatus();
+      if (!running) {
+        state = state.copyWith(
+          status: VpnUiStatus.error,
+          message: 'VPN service did not reach running state',
+        );
+        return;
+      }
 
       state = state.copyWith(
         status: VpnUiStatus.connected,
@@ -116,7 +136,26 @@ class ConnectionController extends StateNotifier<ConnectionUiState> {
     );
 
     try {
-      await CorePlatformApi.stopCore();
+      final stopped = await CorePlatformApi.stopCore();
+      if (!stopped) {
+        state = state.copyWith(
+          status: VpnUiStatus.error,
+          message: 'Failed to stop VPN service',
+        );
+        return;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      final running = await CorePlatformApi.vpnStatus();
+      if (running) {
+        state = state.copyWith(
+          status: VpnUiStatus.error,
+          message: 'VPN service is still running',
+        );
+        return;
+      }
+
       state = ConnectionUiState.initial;
     } on PlatformException catch (e) {
       state = state.copyWith(
