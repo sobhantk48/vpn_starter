@@ -1,86 +1,44 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vpn_starter/features/home/application/connection_controller.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(connectionControllerProvider);
-    final controller = ref.read(connectionControllerProvider.notifier);
-
-    const profileName = 'Default Profile';
-    const coreName = 'sing-box';
-
-    final isConnected = state.isConnected;
-    final isBusy = state.isBusy;
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VPN Starter'),
+        title: const Text('V2ray Stk'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Text(
-                      isConnected ? 'Connected' : 'Disconnected',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(state.message),
-                    const SizedBox(height: 12),
-                    Text('Profile: ${state.activeProfileName ?? profileName}'),
-                    Text('Core: ${state.activeCoreName ?? coreName}'),
-                  ],
-                ),
+      body: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 40,
+                color: colors.primary,
               ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: isBusy
-                  ? null
-                  : () async {
-                      if (isConnected) {
-                        await controller.disconnect();
-                      } else {
-                        await controller.connect(
-                          profileName: profileName,
-                          coreName: coreName,
-                        );
-                      }
-                    },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Text(
-                  isBusy
-                      ? 'Please wait...'
-                      : isConnected
-                          ? 'Disconnect'
-                          : 'Connect',
-                ),
+              const SizedBox(height: 12),
+              Text(
+                'Phase 0 Ready',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: isBusy
-                  ? null
-                  : () async {
-                      await controller.connect(
-                        profileName: profileName,
-                        coreName: coreName,
-                      );
-                    },
-              child: const Text('Retry Connect'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Base app shell is up.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
         ),
       ),
     );
