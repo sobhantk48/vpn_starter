@@ -1,5 +1,6 @@
-package com.v2ray.stk
+package com.v2ray.stk;
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterActivity;
 
-class MainActivity : FlutterActivity()
+public class MainActivity extends FlutterActivity {
+}
